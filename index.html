@@ -17,15 +17,6 @@
         width: 100vw;
         height: 100vh;
         overflow: hidden;
-        background: black;
-      }
-      /* MindARが生成するカメラ映像の canvas を確実に全画面かつ最背面に配置する */
-      a-scene {
-        width: 100vw;
-        height: 100vh;
-        position: absolute;
-        top: 0;
-        left: 0;
       }
       #start-overlay {
         position: fixed;
@@ -61,6 +52,7 @@
       <button id="start-button">カメラを起動する</button>
     </div>
 
+    <!-- 最初にカメラが確実に映る標準のembedded構成 -->
     <a-scene 
       embedded
       mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no;" 
@@ -68,43 +60,38 @@
       device-orientation-permission-ui="enabled: false">
       
       <a-assets>
-        <!-- ベース動画 (音あり / loop / playsinline) -->
         <video id="base-video" src="./base.mp4" preload="auto" loop crossorigin="anonymous" playsinline></video>
-        <!-- エフェクト動画 (緑背景 / 音なしmuted / loop / playsinline) -->
         <video id="effect-video" src="./effect.mp4" preload="auto" loop crossorigin="anonymous" playsinline muted></video>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- マーカー検出ターゲット（縦向きトレカサイズ: 54mm x 86mm -> 比率 1 : 1.5926） -->
+      <!-- マーカー検出ターゲット -->
       <a-entity id="card-target" mindar-image-target="targetIndex: 0">
         
-        <!-- 1. ベース動画（縦向き用に width と height を入れ替え、rotation="0 0 90" で縦に回転） -->
+        <!-- 1. ベース動画（回転させず、縦型の比率 width=0.6279, height=1.0 に設定） -->
         <a-video 
           src="#base-video" 
           width="0.6279" 
           height="1.0" 
-          rotation="0 0 90"
           position="0 0 0">
         </a-video>
 
-        <!-- 2. 角丸マスク（縦向き 54x86mm に合わせた角丸オーバーレイ） -->
+        <!-- 2. 角丸マスク（縦型 54x86mm に合わせた角丸オーバーレイ） -->
         <a-plane 
           id="rounded-mask" 
           width="0.6299" 
           height="1.002" 
-          rotation="0 0 90"
           position="0 0 0.005" 
           material="transparent: true; opacity: 1;">
         </a-plane>
 
-        <!-- 3. エフェクト動画（緑背景クロマキー / 縦向き・手前 position z=0.06 に浮遊） -->
+        <!-- 3. エフェクト動画（緑背景クロマキー / 手前 position z=0.06 に浮遊） -->
         <a-video 
           src="#effect-video" 
           material="shader: chromakey; color: 0.1 0.9 0.1; chromakey: true" 
           width="0.785" 
           height="1.25" 
-          rotation="0 0 90"
           position="0 0 0.06">
         </a-video>
 
@@ -121,66 +108,4 @@
 
         const w = canvas.width;
         const h = canvas.height;
-        const r = w * (3 / 54); // 幅54mmに対する3mmの半径比率
-
-        // 外側全体を黒で塗りつぶし
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, w, h);
-
-        // 中央の角丸くり抜き部をクリア
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.beginPath();
-        ctx.moveTo(r, 0);
-        ctx.arcTo(w, 0, w, h, r);
-        ctx.arcTo(w, h, 0, h, r);
-        ctx.arcTo(0, h, 0, 0, r);
-        ctx.arcTo(0, 0, w, 0, r);
-        ctx.closePath();
-        ctx.fill();
-
-        const maskPlane = document.querySelector('#rounded-mask');
-        maskPlane.setAttribute('material', 'src', canvas.toDataURL());
-      }
-
-      window.addEventListener('load', createCornerMask);
-
-      // 2. AR制御と動画の1秒遅延・同期再生ロジック
-      const sceneEl = document.querySelector('a-scene');
-      const startOverlay = document.querySelector('#start-overlay');
-      const target = document.querySelector('#card-target');
-      const baseVideo = document.querySelector('#base-video');
-      const effectVideo = document.querySelector('#effect-video');
-      
-      let delayTimer = null;
-
-      // スタートボタンタップでWebAR起動
-      startOverlay.addEventListener('click', async () => {
-        startOverlay.style.display = 'none';
-        
-        if (!sceneEl.hasLoaded) {
-          await new Promise(resolve => sceneEl.addEventListener('loaded', resolve));
-        }
-        window.dispatchEvent(new Event('resize'));
-        sceneEl.systems["mindar-image-system"].start();
-      });
-
-      // 【マーカー検出時】 1秒（1000ms）待機してから両方の動画を同期再生
-      target.addEventListener('targetFound', () => {
-        delayTimer = setTimeout(() => {
-          baseVideo.play();
-          effectVideo.play();
-        }, 1000);
-      });
-
-      // 【マーカー見失い時】 タイマーをクリアし、動画を一時停止
-      target.addEventListener('targetLost', () => {
-        if (delayTimer) {
-          clearTimeout(delayTimer);
-          delayTimer = null;
-        }
-        baseVideo.pause();
-        effectVideo.pause();
-      });
-    </script>
-  </body>
-</html>
+        const
