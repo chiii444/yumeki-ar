@@ -19,7 +19,6 @@
   </head>
   <body>
 
-    <!-- カメラが正常に起動していた最もシンプルな標準構成 -->
     <a-scene 
       mindar-image="imageTargetSrc: ./targets.mind;" 
       color-space="sRGB" 
@@ -28,8 +27,8 @@
       device-orientation-permission-ui="enabled: false">
       
       <a-assets>
-        <video id="base-video" src="./base.mp4" preload="auto" loop crossorigin="anonymous" playsinline></video>
-        <video id="effect-video" src="./effect.mp4" preload="auto" loop crossorigin="anonymous" playsinline muted></video>
+        <video id="base-video" src="./base.mp4" preload="auto" loop crossorigin="anonymous" playsinline webkit-playsinline></video>
+        <video id="effect-video" src="./effect.mp4" preload="auto" loop crossorigin="anonymous" playsinline webkit-playsinline muted></video>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -37,7 +36,7 @@
       <!-- マーカー検出ターゲット（縦型トレカサイズ: 54x86mm） -->
       <a-entity id="card-target" mindar-image-target="targetIndex: 0">
         
-        <!-- 1. ベース動画（縦型比率 width: 0.6279, height: 1.0） -->
+        <!-- 1. ベース動画 -->
         <a-video 
           src="#base-video" 
           width="0.6279" 
@@ -45,7 +44,7 @@
           position="0 0 0">
         </a-video>
 
-        <!-- 2. 角丸マスク（縦型 54x86mm に合わせた角丸オーバーレイ） -->
+        <!-- 2. 角丸マスク -->
         <a-plane 
           id="rounded-mask" 
           width="0.6299" 
@@ -54,7 +53,7 @@
           material="transparent: true; opacity: 1;">
         </a-plane>
 
-        <!-- 3. エフェクト動画（緑背景クロマキー / 手前 position z=0.06 に浮遊） -->
+        <!-- 3. エフェクト動画（緑背景クロマキー） -->
         <a-video 
           src="#effect-video" 
           material="shader: chromakey; color: 0.1 0.9 0.1; chromakey: true" 
@@ -67,7 +66,7 @@
     </a-scene>
 
     <script>
-      // 1. 縦型 54mm x 86mm の比率と「角丸3mm」に合わせたマスク画像を動的生成
+      // 角丸マスクの動的生成
       function createCornerMask() {
         const canvas = document.createElement('canvas');
         canvas.width = 540;
@@ -99,15 +98,40 @@
 
       window.addEventListener('load', createCornerMask);
 
-      // 2. 動画の1秒遅延・同期再生制御
+      // 動画の確実なロードと1秒遅延・同期再生制御
       const target = document.querySelector('#card-target');
       const baseVideo = document.querySelector('#base-video');
       const effectVideo = document.querySelector('#effect-video');
       
       let delayTimer = null;
 
+      // ページ読み込み時に一度サイレント再生を試みてiOSの再生制限を強制解除
+      window.addEventListener('load', () => {
+        baseVideo.load();
+        effectVideo.load();
+      });
+
       if (target) {
         target.addEventListener('targetFound', () => {
+          // 再生前に一度currentTimeを0に戻すことで黒画面でのフリーズを防ぐ
+          baseVideo.currentTime = 0;
+          effectVideo.currentTime = 0;
+
           delayTimer = setTimeout(() => {
-            if (baseVideo) baseVideo.play();
-            if (effectVideo) effectVideo.play();
+            baseVideo.play().catch(e => console.log("Base play error:", e));
+            effectVideo.play().catch(e => console.log("Effect play error:", e));
+          }, 1000);
+        });
+
+        target.addEventListener('targetLost', () => {
+          if (delayTimer) {
+            clearTimeout(delayTimer);
+            delayTimer = null;
+          }
+          baseVideo.pause();
+          effectVideo.pause();
+        });
+      }
+    </script>
+  </body>
+</html>
