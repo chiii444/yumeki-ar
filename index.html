@@ -27,7 +27,7 @@
       device-orientation-permission-ui="enabled: false">
       
       <a-assets>
-        <video id="base-video" src="./base.mp4" preload="auto" loop crossorigin="anonymous" playsinline webkit-playsinline></video>
+        <video id="base-video" src="./base.mp4" preload="auto" loop crossorigin="anonymous" playsinline webkit-playsinline muted></video>
         <video id="effect-video" src="./effect.mp4" preload="auto" loop crossorigin="anonymous" playsinline webkit-playsinline muted></video>
       </a-assets>
 
@@ -98,31 +98,47 @@
 
       window.addEventListener('load', createCornerMask);
 
-      // 動画の確実なロードと1秒遅延・同期再生制御
+      // 動画の確実な同期・再生制御
       const target = document.querySelector('#card-target');
       const baseVideo = document.querySelector('#base-video');
       const effectVideo = document.querySelector('#effect-video');
       
       let delayTimer = null;
 
-      // ページ読み込み時に一度サイレント再生を試みてiOSの再生制限を強制解除
+      // ページ読み込み時に動画を裏でプリロード
       window.addEventListener('load', () => {
         baseVideo.load();
         effectVideo.load();
       });
 
       if (target) {
+        // マーカーを検出したとき
         target.addEventListener('targetFound', () => {
-          // 再生前に一度currentTimeを0に戻すことで黒画面でのフリーズを防ぐ
+          // 1. まず再生位置を必ず頭（0秒）に戻す
           baseVideo.currentTime = 0;
           effectVideo.currentTime = 0;
 
+          // 2. 0.8秒だけ待って（トラッキングを安定させてから）再生を実行
+          if (delayTimer) clearTimeout(delayTimer);
           delayTimer = setTimeout(() => {
-            baseVideo.play().catch(e => console.log("Base play error:", e));
-            effectVideo.play().catch(e => console.log("Effect play error:", e));
-          }, 1000);
+            // 動画の準備ができているか確認してから再生を指示
+            const playPromise1 = baseVideo.play();
+            const playPromise2 = effectVideo.play();
+
+            if (playPromise1 !== undefined) {
+              playPromise1.catch(error => {
+                console.log("Base video autoplay prevented:", error);
+              });
+            }
+            if (playPromise2 !== undefined) {
+              playPromise2.catch(error => {
+                console.log("Effect video autoplay prevented:", error);
+              });
+            }
+          }, 800);
         });
 
+        // マーカーを見失ったとき
         target.addEventListener('targetLost', () => {
           if (delayTimer) {
             clearTimeout(delayTimer);
@@ -130,6 +146,9 @@
           }
           baseVideo.pause();
           effectVideo.pause();
+          // 見失ったときも頭に戻しておく
+          baseVideo.currentTime = 0;
+          effectVideo.currentTime = 0;
         });
       }
     </script>
