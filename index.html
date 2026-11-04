@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Trading Card (86x54mm)</title>
+    <!-- A-Frame & MindAR -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <!-- クロマキー（背景緑透明化） -->
+    <script src="https://unpkg.com/aframe-chromakey-material/dist/aframe-chromakey-material.min.js"></script>
+    
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+      }
+      #start-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        font-family: sans-serif;
+        font-size: 18px;
+        z-index: 9999;
+        cursor: pointer;
+      }
+      #start-button {
+        margin-top: 15px;
+        padding: 12px 24px;
+        background: #007aff;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- iOSなどの自動再生制限を解除するためのタップ画面 -->
+    <div id="start-overlay">
+      <div>画面をタップしてARをスタート</div>
+      <button id="start-button">カメラを起動する</button>
+    </div>
+
+    <a-scene 
+      embedded
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiLoading: no; uiError: no;" 
+      vr-mode-ui="enabled: false" 
+      device-orientation-permission-ui="enabled: false">
+      
+      <a-assets>
+        <!-- ベース動画 (86x54mm 横型 / 音あり / loop / playsinline) -->
+        <video id="base-video" src="./base.mp4" preload="auto" loop crossorigin="anonymous" playsinline></video>
+        <!-- エフェクト動画 (緑背景 / 音なしmuted / loop / playsinline) -->
+        <video id="effect-video" src="./effect.mp4" preload="auto" loop crossorigin="anonymous" playsinline muted></video>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- マーカー検出ターゲット（カードサイズ: 86mm x 54mm -> 比率 1 : 0.6279） -->
+      <a-entity id="card-target" mindar-image-target="targetIndex: 0">
+        
+        <!-- 1. ベース動画（カード表面 position z=0） -->
+        <a-video 
+          src="#base-video" 
+          width="1.0" 
+          height="0.6279" 
+          position="0 0 0">
+        </a-video>
+
+        <!-- 2. 角丸マスク（86x54mmに合わせた3mm角丸オーバーレイ） -->
+        <a-plane 
+          id="rounded-mask" 
+          width="1.002" 
+          height="0.6299" 
+          position="0 0 0.005" 
+          material="transparent: true; opacity: 1;">
+        </a-plane>
+
+        <!-- 3. エフェクト動画（緑背景クロマキー / カードより大きくはみ出し / 手前 position z=0.06 に浮遊） -->
+        <a-video 
+          src="#effect-video" 
+          material="shader: chromakey; color: 0.1 0.9 0.1; chromakey: true" 
+          width="1.25" 
+          height="0.785" 
+          position="0 0 0.06">
+        </a-video>
+
+      </a-entity>
+    </a-scene>
+
+    <script>
+      // 1. 86mm x 54mm の比率と「角丸3mm」に合わせたマスク画像を動的生成
+      function createCornerMask() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 860;
+        canvas.height = 540; // 86:54 の横型比率
+        const ctx = canvas.getContext('2d');
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const r = w * (3 / 86); // 横幅86mmに対する3mmの半径比率
+
+        // 外側全体を黒で塗りつぶし
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, w, h);
+
+        // 中央の角丸くり抜き部をクリア（動画を覗かせル）
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.moveTo(r, 0);
+        ctx.arcTo(w, 0, w, h, r);
+        ctx.arcTo(w, h, 0, h, r);
+        ctx.arcTo(0, h, 0, 0, r);
+        ctx.arcTo(0, 0, w, 0, r);
+        ctx.closePath();
+        ctx.fill();
+
+        const maskPlane = document.querySelector('#rounded-mask');
+        maskPlane.setAttribute('material', 'src', canvas.toDataURL());
+      }
+
+      window.addEventListener('load', createCornerMask);
+
+      // 2. AR制御と動画の1秒遅延・同期再生ロジック
+      const sceneEl = document.querySelector('a-scene');
+      const startOverlay = document.querySelector('#start-overlay');
+      const target = document.querySelector('#card-target');
+      const baseVideo = document.querySelector('#base-video');
+      const effectVideo = document.querySelector('#effect-video');
+      
+      let delayTimer = null;
+
+      // スタートボタンタップでWebAR起動
+      startOverlay.addEventListener('click', async () => {
+        startOverlay.style.display = 'none';
+        
+        if (!sceneEl.hasLoaded) {
+          await new Promise(resolve => sceneEl.addEventListener('loaded', resolve));
+        }
+        window.dispatchEvent(new Event('resize'));
+        sceneEl.systems["mindar-image-system"].start();
+      });
+
+      // 【マーカー検出時】 1秒（1000ms）待機してから両方の動画を同期再生
+      target.addEventListener('targetFound', () => {
+        delayTimer = setTimeout(() => {
+          baseVideo.play();
+          effectVideo.play();
+        }, 1000);
+      });
+
+      // 【マーカー見失い時】 タイマーをクリアし、動画を一時停止（再検出時は途中から再開）
+      target.addEventListener('targetLost', () => {
+        if (delayTimer) {
+          clearTimeout(delayTimer);
+          delayTimer = null;
+        }
+        baseVideo.pause();
+        effectVideo.pause();
+      });
+    </script>
+  </body>
+</html>
