@@ -17,11 +17,20 @@
         width: 100vw;
         height: 100vh;
         overflow: hidden;
+        background: black;
+      }
+      /* MindARが生成するカメラ映像の canvas を確実に全画面かつ最背面に配置する */
+      a-scene {
+        width: 100vw;
+        height: 100vh;
+        position: absolute;
+        top: 0;
+        left: 0;
       }
       #start-overlay {
         position: fixed;
         top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.85);
         color: white;
         display: flex;
         flex-direction: column;
@@ -29,7 +38,7 @@
         align-items: center;
         font-family: sans-serif;
         font-size: 18px;
-        z-index: 9999;
+        z-index: 99999;
         cursor: pointer;
       }
       #start-button {
@@ -59,7 +68,7 @@
       device-orientation-permission-ui="enabled: false">
       
       <a-assets>
-        <!-- ベース動画 (86x54mm 横型 / 音あり / loop / playsinline) -->
+        <!-- ベース動画 (音あり / loop / playsinline) -->
         <video id="base-video" src="./base.mp4" preload="auto" loop crossorigin="anonymous" playsinline></video>
         <!-- エフェクト動画 (緑背景 / 音なしmuted / loop / playsinline) -->
         <video id="effect-video" src="./effect.mp4" preload="auto" loop crossorigin="anonymous" playsinline muted></video>
@@ -67,32 +76,35 @@
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- マーカー検出ターゲット（カードサイズ: 86mm x 54mm -> 比率 1 : 0.6279） -->
+      <!-- マーカー検出ターゲット（縦向きトレカサイズ: 54mm x 86mm -> 比率 1 : 1.5926） -->
       <a-entity id="card-target" mindar-image-target="targetIndex: 0">
         
-        <!-- 1. ベース動画（カード表面 position z=0） -->
+        <!-- 1. ベース動画（縦向き用に width と height を入れ替え、rotation="0 0 90" で縦に回転） -->
         <a-video 
           src="#base-video" 
-          width="1.0" 
-          height="0.6279" 
+          width="0.6279" 
+          height="1.0" 
+          rotation="0 0 90"
           position="0 0 0">
         </a-video>
 
-        <!-- 2. 角丸マスク（86x54mmに合わせた3mm角丸オーバーレイ） -->
+        <!-- 2. 角丸マスク（縦向き 54x86mm に合わせた角丸オーバーレイ） -->
         <a-plane 
           id="rounded-mask" 
-          width="1.002" 
-          height="0.6299" 
+          width="0.6299" 
+          height="1.002" 
+          rotation="0 0 90"
           position="0 0 0.005" 
           material="transparent: true; opacity: 1;">
         </a-plane>
 
-        <!-- 3. エフェクト動画（緑背景クロマキー / カードより大きくはみ出し / 手前 position z=0.06 に浮遊） -->
+        <!-- 3. エフェクト動画（緑背景クロマキー / 縦向き・手前 position z=0.06 に浮遊） -->
         <a-video 
           src="#effect-video" 
           material="shader: chromakey; color: 0.1 0.9 0.1; chromakey: true" 
-          width="1.25" 
-          height="0.785" 
+          width="0.785" 
+          height="1.25" 
+          rotation="0 0 90"
           position="0 0 0.06">
         </a-video>
 
@@ -100,22 +112,22 @@
     </a-scene>
 
     <script>
-      // 1. 86mm x 54mm の比率と「角丸3mm」に合わせたマスク画像を動的生成
+      // 1. 縦型 54mm x 86mm の比率と「角丸3mm」に合わせたマスク画像を動的生成
       function createCornerMask() {
         const canvas = document.createElement('canvas');
-        canvas.width = 860;
-        canvas.height = 540; // 86:54 の横型比率
+        canvas.width = 540;
+        canvas.height = 860; // 54:86 の縦型比率
         const ctx = canvas.getContext('2d');
 
         const w = canvas.width;
         const h = canvas.height;
-        const r = w * (3 / 86); // 横幅86mmに対する3mmの半径比率
+        const r = w * (3 / 54); // 幅54mmに対する3mmの半径比率
 
         // 外側全体を黒で塗りつぶし
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, w, h);
 
-        // 中央の角丸くり抜き部をクリア（動画を覗かせル）
+        // 中央の角丸くり抜き部をクリア
         ctx.globalCompositeOperation = 'destination-out';
         ctx.beginPath();
         ctx.moveTo(r, 0);
@@ -160,7 +172,7 @@
         }, 1000);
       });
 
-      // 【マーカー見失い時】 タイマーをクリアし、動画を一時停止（再検出時は途中から再開）
+      // 【マーカー見失い時】 タイマーをクリアし、動画を一時停止
       target.addEventListener('targetLost', () => {
         if (delayTimer) {
           clearTimeout(delayTimer);
